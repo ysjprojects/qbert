@@ -123,7 +123,7 @@ class Quaternion:
     Supports initialization, Hamilton product, addition, normalization, and conjugation.
     """
 
-    def __init__(self, tensor):
+    def __init__(self, r=None, i=None, j=None, k=None, tensor=None):
         """
         Initialize with a tensor that will be split into quaternion components.
         The tensor's last dimension is assumed to represent concatenated quaternion components
@@ -132,25 +132,14 @@ class Quaternion:
         Args:
             tensor (torch.Tensor): A tensor with quaternion components concatenated along the last dimension.
         """
-        self.tensor = tensor
-        self.r, self.i, self.j, self.k = torch.split(self.tensor, self.tensor.shape[-1] // 4, dim=-1)
-
-    @classmethod
-    def from_components(cls, r, i, j, k):
-        """
-        Create a Quaternion object from separate r, i, j, k component tensors.
-
-        Args:
-            r (torch.Tensor): Real component.
-            i (torch.Tensor): First imaginary component.
-            j (torch.Tensor): Second imaginary component.
-            k (torch.Tensor): Third imaginary component.
-
-        Returns:
-            Quaternion: A quaternion object created from the input components.
-        """
-        tensor = torch.cat([r, i, j, k], dim=-1)
-        return cls(tensor)
+        if tensor is not None:
+            self.r, self.i, self.j, self.k = torch.split(tensor, tensor.shape[-1] // 4, dim=-1)
+        else:
+            assert r is not None and i is not None and j is not None and k is not None
+            self.r = r
+            self.i = i
+            self.j = j
+            self.k = k
 
     def hamilton_product(self, other, as_tensor=True):
         """
@@ -163,22 +152,23 @@ class Quaternion:
         Returns:
             torch.Tensor: A tensor representing the resulting quaternion components (r, i, j, k).
         """
+        r1, i1, j1, k1 = self.r, self.i, self.j, self.k
         r2, i2, j2, k2 = other.r, other.i, other.j, other.k
 
-        if self.r.dim() == 2 and r2.dim() == 2 and self.r.shape[-1] == r2.shape[-2]:
+        if r1.dim() == 2 and r2.dim() == 2 and r1.shape[-1] == r2.shape[-2]:
             # Matrix multiplication
-            r = torch.matmul(self.r, r2) - torch.matmul(self.i, i2) - torch.matmul(self.j, j2) - torch.matmul(self.k, k2)
-            i = torch.matmul(self.r, i2) + torch.matmul(self.i, r2) + torch.matmul(self.j, k2) - torch.matmul(self.k, j2)
-            j = torch.matmul(self.r, j2) - torch.matmul(self.i, k2) + torch.matmul(self.j, r2) + torch.matmul(self.k, i2)
-            k = torch.matmul(self.r, k2) + torch.matmul(self.i, j2) - torch.matmul(self.j, i2) + torch.matmul(self.k, r2)
+            r = torch.matmul(r1, r2) - torch.matmul(i1, i2) - torch.matmul(j1, j2) - torch.matmul(k1, k2)
+            i = torch.matmul(r1, i2) + torch.matmul(i1, r2) + torch.matmul(j1, k2) - torch.matmul(k1, j2)
+            j = torch.matmul(r1, j2) - torch.matmul(i1, k2) + torch.matmul(j1, r2) + torch.matmul(k1, i2)
+            k = torch.matmul(r1, k2) + torch.matmul(i1, j2) - torch.matmul(j1, i2) + torch.matmul(k1, r2)
         else:
             # Element-wise multiplication
-            r = self.r * r2 - self.i * i2 - self.j * j2 - self.k * k2
-            i = self.r * i2 + self.i * r2 + self.j * k2 - self.k * j2
-            j = self.r * j2 - self.i * k2 + self.j * r2 + self.k * i2
-            k = self.r * k2 + self.i * j2 - self.j * i2 + self.k * r2
+            r = r1 * r2 - i1 * i2 - j1 * j2 - k1 * k2
+            i = r1 * i2 + i1 * r2 + j1 * k2 - k1 * j2
+            j = r1 * j2 - i1 * k2 + j1 * r2 + k1 * i2
+            k = r1 * k2 + i1 * j2 - j1 * i2 + k1 * r2
 
-        q = Quaternion(torch.cat([r, i, j, k], dim=-1))
+        q = Quaternion(r, i, j, k)
         if as_tensor:
             return q.as_tensor()
         return q
@@ -198,7 +188,7 @@ class Quaternion:
         j = self.j + other.j
         k = self.k + other.k
 
-        return Quaternion(torch.cat([r, i, j, k], dim=-1))
+        return Quaternion(r, i, j, k)
 
     def normalize(self):
         """
@@ -208,7 +198,7 @@ class Quaternion:
             Quaternion: A normalized quaternion.
         """
         norm = torch.sqrt(self.r ** 2 + self.i ** 2 + self.j ** 2 + self.k ** 2)
-        return Quaternion(torch.cat([self.r / norm, self.i / norm, self.j / norm, self.k / norm], dim=-1))
+        return Quaternion(self.r / norm, self.i / norm, self.j / norm, self.k / norm)
 
     def conjugate(self):
         """
@@ -217,7 +207,7 @@ class Quaternion:
         Returns:
             Quaternion: The conjugated quaternion.
         """
-        return Quaternion(torch.cat([self.r, -self.i, -self.j, -self.k], dim=-1))
+        return Quaternion(self.r, -self.i, -self.j, -self.k)
 
     def as_tensor(self):
         """
@@ -238,7 +228,7 @@ class QuaternionTransformation(nn.Module):
     learnable quaternion weights. Supports optional activation functions.
     """
 
-    def __init__(self, input_dim, output_dim, activation=None, init=None):
+    def __init__(self, input_dim, output_dim, activation=None):
         """
         Initialize the QuaternionTransformation module.
 
@@ -264,19 +254,6 @@ class QuaternionTransformation(nn.Module):
         self.j_weight = nn.Parameter(torch.Tensor(self.input_dim, self.output_dim))
         self.k_weight = nn.Parameter(torch.Tensor(self.input_dim, self.output_dim))
 
-        # Initialize the weights
-        if init is None:
-            nn.init.xavier_uniform_(self.r_weight)
-            nn.init.xavier_uniform_(self.i_weight)
-            nn.init.xavier_uniform_(self.j_weight)
-            nn.init.xavier_uniform_(self.k_weight)
-        else:
-            # Apply custom initialization if provided
-            self.r_weight.data = init(self.r_weight.data)
-            self.i_weight.data = init(self.i_weight.data)
-            self.j_weight.data = init(self.j_weight.data)
-            self.k_weight.data = init(self.k_weight.data)
-
     def forward(self, x):
         """
         Perform the quaternion transformation on the input tensor.
@@ -299,13 +276,13 @@ class QuaternionTransformation(nn.Module):
             x = x.view(batch_size * seq_len, output_dim)
 
         # Convert input tensor into quaternion components (r, i, j, k)
-        q_x = Quaternion(x)
+        q_x = Quaternion(tensor=x)
 
         # Create a quaternion from the learnable weights
-        q_kernel = Quaternion.from_components(self.r_weight, self.i_weight, self.j_weight, self.k_weight)
+        q_kernel = Quaternion(self.r_weight, self.i_weight, self.j_weight, self.k_weight)
 
         # Perform Hamilton product (quaternion multiplication)
-        hamilton_product_result = q_x.hamilton_product(q_kernel)
+        hamilton_product_result = q_kernel.hamilton_product(q_x)
 
         # Apply activation function if provided
         if self.activation is not None:
@@ -377,26 +354,30 @@ class QBertSelfAttention(nn.Module):
         # Split inputs into quaternion components
         ar, ai, aj, ak = torch.chunk(a, 4, dim=-1)
         br, bi, bj, bk = torch.chunk(b, 4, dim=-1)
+        br = br.transpose(-1, -2)
+        bi = bi.transpose(-1, -2)
+        bj = bj.transpose(-1, -2)
+        bk = bk.transpose(-1, -2)
 
         # Compute the quaternion Hamilton product
-        r = (torch.matmul(ar, br.transpose(-1, -2))
-             - torch.matmul(ai, bi.transpose(-1, -2))
-             - torch.matmul(aj, bj.transpose(-1, -2))
-             - torch.matmul(ak, bk.transpose(-1, -2)))
-        i = (torch.matmul(ar, bi.transpose(-1, -2))
-             + torch.matmul(ai, br.transpose(-1, -2))
-             + torch.matmul(aj, bk.transpose(-1, -2))
-             - torch.matmul(ak, bj.transpose(-1, -2)))
-        j = (torch.matmul(ar, bj.transpose(-1, -2))
-             - torch.matmul(ai, bk.transpose(-1, -2))
-             + torch.matmul(aj, br.transpose(-1, -2))
-             + torch.matmul(ak, bi.transpose(-1, -2)))
-        k = (torch.matmul(ar, bk.transpose(-1, -2))
-             + torch.matmul(ai, bj.transpose(-1, -2))
-             - torch.matmul(aj, bi.transpose(-1, -2))
-             + torch.matmul(ak, br.transpose(-1, -2)))
+        r = (torch.matmul(ar, br)
+             - torch.matmul(ai, bi)
+             - torch.matmul(aj, bj)
+             - torch.matmul(ak, bk))
+        i = (torch.matmul(ar, bi)
+             + torch.matmul(ai, br)
+             + torch.matmul(aj, bk)
+             - torch.matmul(ak, bj))
+        j = (torch.matmul(ar, bj)
+             - torch.matmul(ai, bk)
+             + torch.matmul(aj, br)
+             + torch.matmul(ak, bi))
+        k = (torch.matmul(ar, bk)
+             + torch.matmul(ai, bj)
+             - torch.matmul(aj, bi)
+             + torch.matmul(ak, br))
 
-        return Quaternion.from_components(r, i, j, k)
+        return Quaternion(r,i,j,k)
 
     def forward(
         self,
@@ -417,54 +398,44 @@ class QBertSelfAttention(nn.Module):
         
         attention_scores = self.quaternion_attention(query_layer, key_layer)
 
-        scaling_factor = math.sqrt(self.attention_head_size)
-        attention_scores_r = attention_scores.r / scaling_factor
-        attention_scores_i = attention_scores.i / scaling_factor
-        attention_scores_j = attention_scores.j / scaling_factor
-        attention_scores_k = attention_scores.k / scaling_factor
+        attention_norm = torch.sqrt(
+            attention_scores.r**2 + 
+            attention_scores.i**2 + 
+            attention_scores.j**2 + 
+            attention_scores.k**2 + 
+            1e-8
+        )
+
+        attention_norm = attention_norm / math.sqrt(self.attention_head_size / 4)
+        
         
         if attention_mask is not None:
-            attention_mask_r, attention_mask_i, attention_mask_j, attention_mask_k = torch.chunk(attention_mask, 4, dim=-1)
-            attention_scores_r += attention_mask_r
-            attention_scores_i += attention_mask_i
-            attention_scores_j += attention_mask_j
-            attention_scores_k += attention_mask_k
-
-        # Normalize the attention scores to probabilities.
-        attention_probs_r = nn.functional.softmax(attention_scores_r, dim=-1)
-        attention_probs_i = nn.functional.softmax(attention_scores_i, dim=-1)
-        attention_probs_j = nn.functional.softmax(attention_scores_j, dim=-1)
-        attention_probs_k = nn.functional.softmax(attention_scores_k, dim=-1)
+            attention_norm = attention_norm + attention_mask
+            
+        attention_weights = nn.functional.softmax(attention_norm, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs_r = self.dropout(attention_probs_r)
-        attention_probs_i = self.dropout(attention_probs_i)
-        attention_probs_j = self.dropout(attention_probs_j)
-        attention_probs_k = self.dropout(attention_probs_k)
+        attention_weights = self.dropout(attention_weights)
 
         # Mask heads if we want to
         if head_mask is not None:
-            head_mask_r, head_mask_i, head_mask_j, head_mask_k = torch.chunk(head_mask, 4, dim=-1)
-            attention_probs_r *= head_mask_r
-            attention_probs_i *= head_mask_i
-            attention_probs_j *= head_mask_j
-            attention_probs_k *= head_mask_k
+            attention_weights = attention_weights * head_mask
 
         value_r, value_i, value_j, value_k = torch.chunk(value_layer, 4, dim=-1)
-        attention_r = attention_probs_r @ value_r
-        attention_i = attention_probs_i @ value_i
-        attention_j = attention_probs_j @ value_j
-        attention_k = attention_probs_k @ value_k
 
-        context_layer = torch.cat((attention_r, attention_i, attention_j, attention_k), dim=-1)
+        context_r = torch.matmul(attention_weights, value_r)
+        context_i = torch.matmul(attention_weights, value_i)
+        context_j = torch.matmul(attention_weights, value_j)
+        context_k = torch.matmul(attention_weights, value_k)
+
+        context_layer = torch.cat((context_r, context_i, context_j, context_k), dim=-1)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()  # Now [batch_size, seq_len, num_heads, head_dim]
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)  # Flatten last two dims
         context_layer = context_layer.view(new_context_layer_shape)
 
-        attention_probs = [attention_probs_r, attention_probs_i, attention_probs_j, attention_probs_k]
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (context_layer, attention_weights) if output_attentions else (context_layer,)
         
         return outputs
 
@@ -522,7 +493,11 @@ class QBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         #self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.dense = QuaternionTransformation(config.hidden_size, config.intermediate_size)
+        self.dense = (
+            QuaternionTransformation(config.hidden_size, config.intermediate_size)
+            if config.quaternion_mode == "all"
+            else nn.Linear(config.hidden_size, config.intermediate_size)
+        )
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -537,8 +512,7 @@ class QBertIntermediate(nn.Module):
 class QBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        #self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dense = QuaternionTransformation(config.intermediate_size, config.hidden_size)
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -774,6 +748,11 @@ class QBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, QuaternionTransformation):
+            nn.init.xavier_uniform_(module.r_weight)
+            nn.init.xavier_uniform_(module.i_weight)
+            nn.init.xavier_uniform_(module.j_weight)
+            nn.init.xavier_uniform_(module.k_weight)
 
 
 @dataclass

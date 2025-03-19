@@ -111,6 +111,7 @@ class QBertConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         classifier_dropout=None,
+        quaternion_mode="all", # all, attn
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -129,5 +130,6 @@ class QBertConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.classifier_dropout = classifier_dropout
+        self.quaternion_mode = quaternion_mode
 
 __all__ = ["QBertConfig"]
