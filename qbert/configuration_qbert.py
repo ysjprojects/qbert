@@ -17,8 +17,8 @@
 from collections import OrderedDict
 from typing import Mapping
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from transformers.configuration_utils import PretrainedConfig
+from transformers.utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -92,15 +92,16 @@ class QBertConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "bert"
+    model_type = "qbert"
 
+    # Follows bert-tiny config
     def __init__(
         self,
         vocab_size=30522,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
+        hidden_size=256,
+        num_hidden_layers=4,
+        num_attention_heads=4,
+        intermediate_size=1024,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
