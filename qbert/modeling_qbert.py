@@ -986,7 +986,7 @@ class QBertForPreTraining(QBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = QBertModel(config)
+        self.qbert = QBertModel(config)
         self.cls = QBertPreTrainingHeads(config)
 
         # Initialize weights and apply final processing
@@ -1047,7 +1047,7 @@ class QBertForPreTraining(QBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.qbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1087,7 +1087,7 @@ class QBertForMaskedLM(QBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = QBertModel(config, add_pooling_layer=False)
+        self.qbert = QBertModel(config, add_pooling_layer=False)
         self.cls = QBertOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
@@ -1124,7 +1124,7 @@ class QBertForMaskedLM(QBertPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.qbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1187,7 +1187,7 @@ class QBertForNextSentencePrediction(QBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = QBertModel(config)
+        self.qbert = QBertModel(config)
         self.cls = QBertOnlyNSPHead(config)
 
         # Initialize weights and apply final processing
@@ -1246,7 +1246,7 @@ class QBertForNextSentencePrediction(QBertPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.qbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1285,7 +1285,7 @@ class QBertForSequenceClassification(QBertPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.bert = QBertModel(config)
+        self.qbert = QBertModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1316,7 +1316,7 @@ class QBertForSequenceClassification(QBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.qbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1371,7 +1371,7 @@ class QBertForMultipleChoice(QBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = QBertModel(config)
+        self.qbert = QBertModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1413,7 +1413,7 @@ class QBertForMultipleChoice(QBertPreTrainedModel):
             else None
         )
 
-        outputs = self.bert(
+        outputs = self.qbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1453,7 +1453,7 @@ class QBertForTokenClassification(QBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bert = QBertModel(config, add_pooling_layer=False)
+        self.qbert = QBertModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1482,7 +1482,7 @@ class QBertForTokenClassification(QBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.qbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1521,7 +1521,7 @@ class QBertForQuestionAnswering(QBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bert = QBertModel(config, add_pooling_layer=False)
+        self.qbert = QBertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -1553,7 +1553,7 @@ class QBertForQuestionAnswering(QBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        outputs = self.qbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
