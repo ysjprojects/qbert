@@ -793,11 +793,18 @@ class QBertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, QuaternionTransformation):
-            nn.init.xavier_uniform_(module.r_weight)
-            nn.init.xavier_uniform_(module.i_weight)
-            nn.init.xavier_uniform_(module.j_weight)
-            nn.init.xavier_uniform_(module.k_weight)
-
+            module.r_weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.i_weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.j_weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.k_weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.r_bias is not None:
+                module.r_bias.data.zero_()
+            if module.i_bias is not None:
+                module.i_bias.data.zero_()
+            if module.j_bias is not None:
+                module.j_bias.data.zero_()
+            if module.k_bias is not None:
+                module.k_bias.data.zero_()
 
 @dataclass
 class QBertForPreTrainingOutput(ModelOutput):
