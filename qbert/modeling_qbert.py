@@ -261,10 +261,10 @@ class QuaternionTransformation(nn.Module):
         self.k_weight = nn.Parameter(torch.empty(self.input_dim, self.output_dim, **factory_kwargs))
 
         if bias:
-            self.r_bias = nn.Parameter(torch.empty(output_dim, **factory_kwargs))
-            self.i_bias = nn.Parameter(torch.empty(output_dim, **factory_kwargs))
-            self.j_bias = nn.Parameter(torch.empty(output_dim, **factory_kwargs))
-            self.k_bias = nn.Parameter(torch.empty(output_dim, **factory_kwargs))
+            self.r_bias = nn.Parameter(torch.empty(self.output_dim, **factory_kwargs))
+            self.i_bias = nn.Parameter(torch.empty(self.output_dim, **factory_kwargs))
+            self.j_bias = nn.Parameter(torch.empty(self.output_dim, **factory_kwargs))
+            self.k_bias = nn.Parameter(torch.empty(self.output_dim, **factory_kwargs))
         else:
             self.register_parameter('r_bias', None)
             self.register_parameter('i_bias', None)
@@ -357,7 +357,9 @@ class QBertSelfAttention(nn.Module):
 
         self.query = QuaternionTransformation(config.hidden_size, self.all_head_size)
         self.key = QuaternionTransformation(config.hidden_size, self.all_head_size)
-        self.value = QuaternionTransformation(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        
+        #QuaternionTransformation(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -435,18 +437,18 @@ class QBertSelfAttention(nn.Module):
         
         attention_scores = self.quaternion_attention(query_layer, key_layer)
 
-        attention_norm = torch.sqrt(
-            attention_scores.r**2 + 
-            attention_scores.i**2 + 
-            attention_scores.j**2 + 
-            attention_scores.k**2 + 
-            1e-8
+        attention_norm = (
+            attention_scores.r + 
+            attention_scores.i + 
+            attention_scores.j + 
+            attention_scores.k
         )
 
-        attention_norm = attention_norm / math.sqrt(self.attention_head_size / 4)
+        attention_norm = attention_norm / math.sqrt(self.attention_head_size)
         
         
         if attention_mask is not None:
+            #attention_mask = attention_mask.repeat(1,1,1,4)
             attention_norm = attention_norm + attention_mask
             
         attention_weights = nn.functional.softmax(attention_norm, dim=-1)
@@ -457,16 +459,19 @@ class QBertSelfAttention(nn.Module):
 
         # Mask heads if we want to
         if head_mask is not None:
+            #head_mask = head_mask.repeat(1,1,1,4)
             attention_weights = attention_weights * head_mask
 
-        value_r, value_i, value_j, value_k = torch.chunk(value_layer, 4, dim=-1)
+        #value_r, value_i, value_j, value_k = torch.chunk(value_layer, 4, dim=-1)
 
-        context_r = torch.matmul(attention_weights, value_r)
-        context_i = torch.matmul(attention_weights, value_i)
-        context_j = torch.matmul(attention_weights, value_j)
-        context_k = torch.matmul(attention_weights, value_k)
+        #context_r = torch.matmul(attention_weights, value_r)
+        #context_i = torch.matmul(attention_weights, value_i)
+        #context_j = torch.matmul(attention_weights, value_j)
+        #context_k = torch.matmul(attention_weights, value_k)
+        
+        context_layer = torch.matmul(attention_weights, value_layer)
 
-        context_layer = torch.cat((context_r, context_i, context_j, context_k), dim=-1)
+        #context_layer = torch.cat((context_r, context_i, context_j, context_k), dim=-1)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()  # Now [batch_size, seq_len, num_heads, head_dim]
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)  # Flatten last two dims
