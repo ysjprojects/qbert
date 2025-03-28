@@ -140,7 +140,7 @@ class Quaternion:
             self.j = j
             self.k = k
 
-    def hamilton_product(self, other, as_tensor=True):
+    def hamilton_product(self, other, as_tensor=True, bias=None):
         """
         Perform Hamilton product (quaternion multiplication) between this quaternion
         and another quaternion using either element-wise or matrix multiplication.
@@ -153,19 +153,26 @@ class Quaternion:
         """
         r1, i1, j1, k1 = self.r, self.i, self.j, self.k
         r2, i2, j2, k2 = other.r, other.i, other.j, other.k
+        
+        rb, ib, jb, kb = 0, 0, 0, 0
+        if bias is not None:
+            rb = bias.r
+            ib = bias.i
+            jb = bias.j
+            kb = bias.k
 
         if r1.dim() == 2 and r2.dim() == 2 and r1.shape[-1] == r2.shape[-2]:
             # Matrix multiplication
-            r = torch.matmul(r1, r2) - torch.matmul(i1, i2) - torch.matmul(j1, j2) - torch.matmul(k1, k2)
-            i = torch.matmul(r1, i2) + torch.matmul(i1, r2) + torch.matmul(j1, k2) - torch.matmul(k1, j2)
-            j = torch.matmul(r1, j2) - torch.matmul(i1, k2) + torch.matmul(j1, r2) + torch.matmul(k1, i2)
-            k = torch.matmul(r1, k2) + torch.matmul(i1, j2) - torch.matmul(j1, i2) + torch.matmul(k1, r2)
+            r = torch.matmul(r1, r2) - torch.matmul(i1, i2) - torch.matmul(j1, j2) - torch.matmul(k1, k2) + rb
+            i = torch.matmul(r1, i2) + torch.matmul(i1, r2) + torch.matmul(j1, k2) - torch.matmul(k1, j2) + ib
+            j = torch.matmul(r1, j2) - torch.matmul(i1, k2) + torch.matmul(j1, r2) + torch.matmul(k1, i2) + jb
+            k = torch.matmul(r1, k2) + torch.matmul(i1, j2) - torch.matmul(j1, i2) + torch.matmul(k1, r2) + kb
         else:
             # Element-wise multiplication
-            r = r1 * r2 - i1 * i2 - j1 * j2 - k1 * k2
-            i = r1 * i2 + i1 * r2 + j1 * k2 - k1 * j2
-            j = r1 * j2 - i1 * k2 + j1 * r2 + k1 * i2
-            k = r1 * k2 + i1 * j2 - j1 * i2 + k1 * r2
+            r = r1 * r2 - i1 * i2 - j1 * j2 - k1 * k2 + rb
+            i = r1 * i2 + i1 * r2 + j1 * k2 - k1 * j2 + ib
+            j = r1 * j2 - i1 * k2 + j1 * r2 + k1 * i2 + jb
+            k = r1 * k2 + i1 * j2 - j1 * i2 + k1 * r2 + kb
 
         q = Quaternion(r, i, j, k)
         if as_tensor:
@@ -227,7 +234,7 @@ class QuaternionTransformation(nn.Module):
     learnable quaternion weights. Supports optional activation functions.
     """
 
-    def __init__(self, input_dim, output_dim, activation=None):
+    def __init__(self, input_dim, output_dim, bias=True, device=None, dtype=None):
         """
         Initialize the QuaternionTransformation module.
 
@@ -237,7 +244,8 @@ class QuaternionTransformation(nn.Module):
             activation (callable, optional): Activation function to apply after transformation.
             init (callable, optional): Initialization function for quaternion weights. Defaults to Xavier uniform.
         """
-        super(QuaternionTransformation, self).__init__()
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        super().__init__()
 
         # Quaternion input dimension is divided by 4 (for r, i, j, k components)
         assert input_dim % 4 == 0, "Input dimension must be divisible by 4"
@@ -245,13 +253,48 @@ class QuaternionTransformation(nn.Module):
 
         self.input_dim = input_dim // 4
         self.output_dim = output_dim // 4
-        self.activation = activation
 
         # Learnable quaternion weight matrices for r, i, j, k components
-        self.r_weight = nn.Parameter(torch.Tensor(self.input_dim, self.output_dim))
-        self.i_weight = nn.Parameter(torch.Tensor(self.input_dim, self.output_dim))
-        self.j_weight = nn.Parameter(torch.Tensor(self.input_dim, self.output_dim))
-        self.k_weight = nn.Parameter(torch.Tensor(self.input_dim, self.output_dim))
+        self.r_weight = nn.Parameter(torch.empty(self.input_dim, self.output_dim, **factory_kwargs))
+        self.i_weight = nn.Parameter(torch.empty(self.input_dim, self.output_dim, **factory_kwargs))
+        self.j_weight = nn.Parameter(torch.empty(self.input_dim, self.output_dim, **factory_kwargs))
+        self.k_weight = nn.Parameter(torch.empty(self.input_dim, self.output_dim, **factory_kwargs))
+
+        if bias:
+            self.r_bias = nn.Parameter(torch.empty(output_dim, **factory_kwargs))
+            self.i_bias = nn.Parameter(torch.empty(output_dim, **factory_kwargs))
+            self.j_bias = nn.Parameter(torch.empty(output_dim, **factory_kwargs))
+            self.k_bias = nn.Parameter(torch.empty(output_dim, **factory_kwargs))
+        else:
+            self.register_parameter('r_bias', None)
+            self.register_parameter('i_bias', None)
+            self.register_parameter('j_bias', None)
+            self.register_parameter('k_bias', None)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.kaiming_uniform_(self.r_weight, a=math.sqrt(5))
+        nn.init.kaiming_uniform_(self.i_weight, a=math.sqrt(5))
+        nn.init.kaiming_uniform_(self.j_weight, a=math.sqrt(5))
+        nn.init.kaiming_uniform_(self.k_weight, a=math.sqrt(5))
+
+        if self.r_bias is not None:
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.r_weight)
+            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+            nn.init.uniform_(self.r_bias, -bound, bound)
+        if self.i_bias is not None:
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.i_weight)
+            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+            nn.init.uniform_(self.i_bias, -bound, bound)
+        if self.j_bias is not None:
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.j_weight)
+            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+            nn.init.uniform_(self.j_bias, -bound, bound)
+        if self.k_bias is not None:
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.k_weight)
+            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+            nn.init.uniform_(self.k_bias, -bound, bound)
 
     def forward(self, x):
         """
@@ -276,18 +319,13 @@ class QuaternionTransformation(nn.Module):
 
         # Convert input tensor into quaternion components (r, i, j, k)
         q_x = Quaternion(tensor=x)
+        q_bias = Quaternion(r=self.r_bias, i=self.i_bias, j=self.j_bias, k=self.k_bias)
 
         # Create a quaternion from the learnable weights
         q_kernel = Quaternion(self.r_weight, self.i_weight, self.j_weight, self.k_weight)
 
         # Perform Hamilton product (quaternion multiplication)
-        hamilton_product_result = q_x.hamilton_product(q_kernel)
-
-        # Apply activation function if provided
-        if self.activation is not None:
-            output = self.activation(hamilton_product_result)
-        else:
-            output = hamilton_product_result
+        output = q_x.hamilton_product(q_kernel, bias=q_bias)
 
         if is_3d_input:
             # Reshape back to 3D if input was originally 3D
