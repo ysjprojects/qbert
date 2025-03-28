@@ -357,11 +357,16 @@ class QBertSelfAttention(nn.Module):
 
         self.query = QuaternionTransformation(config.hidden_size, self.all_head_size)
         self.key = QuaternionTransformation(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
-        
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)        
         #QuaternionTransformation(config.hidden_size, self.all_head_size)
 
+        self.qk_concat_weights = nn.Parameter(torch.ones(4))
+
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+        self.weighted_qk_concat = config.weighted_qk_concat
+        if self.weighted_qk_concat:
+            self.qk_concat_weights = nn.Parameter(torch.ones(4))
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -437,11 +442,18 @@ class QBertSelfAttention(nn.Module):
         
         attention_scores = self.quaternion_attention(query_layer, key_layer)
 
+        if self.weighted_qk_concat:
+            norm_qk_concat_weights = (
+                nn.functional.softmax(self.qk_concat_weights, dim=0)
+            )
+        else:
+            norm_qk_concat_weights = torch.ones(4)
+
         attention_norm = (
-            attention_scores.r + 
-            attention_scores.i + 
-            attention_scores.j + 
-            attention_scores.k
+            attention_scores.r * norm_qk_concat_weights[0] + 
+            attention_scores.i * norm_qk_concat_weights[1] + 
+            attention_scores.j * norm_qk_concat_weights[2] + 
+            attention_scores.k * norm_qk_concat_weights[3]
         )
 
         attention_norm = attention_norm / math.sqrt(self.attention_head_size)
