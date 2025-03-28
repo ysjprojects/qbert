@@ -113,6 +113,7 @@ class QBertConfig(PretrainedConfig):
         position_embedding_type="absolute",
         classifier_dropout=None,
         quaternion_mode="all", # all, attn
+        weighted_qk_concat=False,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -132,5 +133,6 @@ class QBertConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.classifier_dropout = classifier_dropout
         self.quaternion_mode = quaternion_mode
+        self.weighted_qk_concat = weighted_qk_concat
 
 __all__ = ["QBertConfig"]
