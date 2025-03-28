@@ -360,8 +360,6 @@ class QBertSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)        
         #QuaternionTransformation(config.hidden_size, self.all_head_size)
 
-        self.qk_concat_weights = nn.Parameter(torch.ones(4))
-
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
         self.weighted_qk_concat = config.weighted_qk_concat
