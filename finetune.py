@@ -20,7 +20,7 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 # Import QBert models
 from qbert.modeling_qbert import QBertForSequenceClassification, QBertConfig
 
-def load_pretrained_model(pretrained_model_path, num_labels=3, is_bert=False, from_scratch=False, qbert_mode="all"):
+def load_pretrained_model(pretrained_model_path, num_labels=3, is_bert=False, from_scratch=False, qbert_mode="all", weighted_qk_concat=False):
     """
     Load a pretrained model and convert it to a sequence classification model.
     
@@ -55,6 +55,7 @@ def load_pretrained_model(pretrained_model_path, num_labels=3, is_bert=False, fr
         max_position_embeddings=512,
         quaternion_mode=qbert_mode,
         num_labels=num_labels,
+        weighted_qk_concat=weighted_qk_concat,
     )
 
     
@@ -178,6 +179,8 @@ if __name__ == "__main__":
     parser.add_argument("--is_bert", action="store_true")
     parser.add_argument("--from_scratch", action="store_true")
     parser.add_argument("--qbert_mode", type=str, default="all")
+    parser.add_argument("--weighted_qk_concat", action="store_true")
+    parser.add_argument("--testing", action="store_true")
     args = parser.parse_args()
     print(f"Received model_path: '{args.model_path}'") 
 
@@ -202,7 +205,7 @@ if __name__ == "__main__":
     
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
     
-    model = load_pretrained_model(args.model_path, args.num_labels, args.is_bert, args.from_scratch, args.qbert_mode)
+    model = load_pretrained_model(args.model_path, args.num_labels, args.is_bert, args.from_scratch, args.qbert_mode, args.weighted_qk_concat)
     model.to(device)
     
     if rank == 0:
@@ -218,13 +221,13 @@ if __name__ == "__main__":
     print(train_dataset.column_names)
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
     
-    model_type = "bert" if args.is_bert else "qbert"
-    output_dir = f"{model_type}_sequence_classification_ft"
+    model_type = "bert" if args.is_bert else ("qbert-weighted" if args.weighted_qk_concat else "qbert")
+    output_dir = ("test_" if args.testing else "") + f"{model_type}_sequence_classification_ft"
     
     training_args = TrainingArguments(
         output_dir=output_dir,
         overwrite_output_dir=True,
-        num_train_epochs=args.epochs,
+        num_train_epochs=args.epochs if not args.testing else 1,
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
         learning_rate=args.learning_rate,
@@ -232,7 +235,7 @@ if __name__ == "__main__":
         save_strategy="epoch",
         evaluation_strategy="epoch",
         logging_dir=f"{output_dir}/logs",
-        logging_steps=100,
+        logging_steps=5,
         save_total_limit=5,
         load_best_model_at_end=True,
         #metric_for_best_model="f1",
@@ -251,8 +254,8 @@ if __name__ == "__main__":
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
+        train_dataset=train_dataset if not args.testing else eval_dataset,
+        eval_dataset=eval_dataset if not args.testing else test_dataset,
         tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
